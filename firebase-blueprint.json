@@ -1,81 +1,84 @@
 {
   "entities": {
-    "User": {
-      "title": "User",
-      "description": "A user of the KI3 POS system.",
-      "type": "object",
-      "properties": {
-        "name": { "type": "string", "maxLength": 100 },
-        "email": { "type": "string", "maxLength": 200 },
-        "role": { "type": "string", "enum": ["ADMIN", "OWNER", "EMPLOYEE"] },
-        "shopId": { "type": "string", "maxLength": 100 },
-        "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["name", "email", "role"]
-    },
     "Shop": {
       "title": "Shop",
-      "description": "A tenant shop on the platform.",
+      "description": "A shop/tenant registered in the system",
       "type": "object",
       "properties": {
         "name": { "type": "string", "maxLength": 100 },
-        "ownerName": { "type": "string", "maxLength": 100 },
-        "phone": { "type": "string", "maxLength": 50 },
-        "plan": { "type": "string", "enum": ["30000 MMK", "50000 MMK"] },
-        "status": { "type": "string", "enum": ["ACTIVE", "SUSPENDED", "EXPIRED"] },
-        "expiryDate": { "type": "string", "maxLength": 50 },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "ownerId": { "type": "string", "maxLength": 128 }
+        "owner": { "type": "string", "maxLength": 100 },
+        "phone": { "type": "string", "maxLength": 20 },
+        "plan": { "type": "string", "maxLength": 50 },
+        "status": { "type": "string", "enum": ["ACTIVE", "EXPIRED", "SUSPENDED"] },
+        "expiry": { "type": "string" },
+        "ownerId": { "type": "string" }
       },
-      "required": ["name", "ownerName", "phone", "plan", "status", "expiryDate", "createdAt", "ownerId"]
+      "required": ["name", "owner", "phone", "status", "ownerId"]
+    },
+    "Employee": {
+      "title": "Employee",
+      "description": "An employee belonging to a specific shop",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 100 },
+        "role": { "type": "string", "maxLength": 50 },
+        "email": { "type": "string", "maxLength": 100 },
+        "phone": { "type": "string", "maxLength": 20 },
+        "status": { "type": "string", "enum": ["Active", "Inactive", "On Leave"] },
+        "shift": { "type": "string", "maxLength": 50 },
+        "shopId": { "type": "string" }
+      },
+      "required": ["name", "role", "shopId"]
     },
     "Product": {
       "title": "Product",
-      "description": "A product sold by a shop.",
+      "description": "Inventory product for a shop",
       "type": "object",
       "properties": {
-        "name": { "type": "string", "maxLength": 200 },
-        "sku": { "type": "string", "maxLength": 100 },
-        "category": { "type": "string", "maxLength": 100 },
+        "name": { "type": "string", "maxLength": 100 },
+        "sku": { "type": "string", "maxLength": 50 },
+        "category": { "type": "string", "maxLength": 50 },
         "price": { "type": "number" },
         "cost": { "type": "number" },
         "stock": { "type": "number" },
-        "image": { "type": "string", "maxLength": 1000 },
-        "shopId": { "type": "string", "maxLength": 128 },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "status": { "type": "string", "maxLength": 50 },
+        "image": { "type": "string", "maxLength": 500 },
+        "shopId": { "type": "string" }
       },
-      "required": ["name", "sku", "category", "price", "cost", "stock", "shopId", "createdAt"]
+      "required": ["name", "price", "stock", "shopId"]
     },
     "Order": {
       "title": "Order",
-      "description": "An order placed in a shop.",
+      "description": "An order placed at a shop",
       "type": "object",
       "properties": {
-        "shopId": { "type": "string", "maxLength": 128 },
+        "customer": { "type": "string", "maxLength": 100 },
+        "type": { "type": "string", "maxLength": 50 },
+        "items": { "type": "string", "maxLength": 500 },
         "total": { "type": "number" },
         "status": { "type": "string", "enum": ["PENDING", "PREPARING", "COMPLETED", "CANCELLED"] },
-        "type": { "type": "string", "enum": ["ONLINE", "OFFLINE"] },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "time": { "type": "string" },
+        "shopId": { "type": "string" }
       },
-      "required": ["shopId", "total", "status", "type", "createdAt"]
+      "required": ["total", "status", "shopId"]
     }
   },
   "firestore": {
-    "/users/{userId}": {
-      "schema": { "$ref": "#/entities/User" },
-      "description": "System users (Admins, Owners, Employees)"
+    "shops": {
+      "schema": "Shop",
+      "description": "Global collection of shops"
     },
-    "/shops/{shopId}": {
-      "schema": { "$ref": "#/entities/Shop" },
-      "description": "Tenant shops"
+    "shops/{shopId}/employees": {
+      "schema": "Employee",
+      "description": "Employees of a specific shop"
     },
-    "/shops/{shopId}/products/{productId}": {
-      "schema": { "$ref": "#/entities/Product" },
-      "description": "Products belonging to a specific shop"
+    "shops/{shopId}/products": {
+      "schema": "Product",
+      "description": "Products of a specific shop"
     },
-    "/shops/{shopId}/orders/{orderId}": {
-      "schema": { "$ref": "#/entities/Order" },
-      "description": "Orders belonging to a specific shop"
+    "shops/{shopId}/orders": {
+      "schema": "Order",
+      "description": "Orders for a specific shop"
     }
   }
 }
