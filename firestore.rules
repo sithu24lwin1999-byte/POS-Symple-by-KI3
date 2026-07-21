@@ -1,0 +1,165 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Common Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isVerified() {
+      // return isSignedIn() && request.auth.token.email_verified == true;
+      // Note: for this demo, we might just require signIn.
+      return isSignedIn();
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isVerified() && getUserData().role == 'ADMIN';
+    }
+    
+    function isOwnerOf(shopId) {
+      return isVerified() && (
+        getUserData().role == 'OWNER' && getUserData().shopId == shopId
+        || get(/databases/$(database)/documents/shops/$(shopId)).data.ownerId == request.auth.uid
+      );
+    }
+    
+    function isEmployeeOf(shopId) {
+      return isVerified() && getUserData().role == 'EMPLOYEE' && getUserData().shopId == shopId;
+    }
+    
+    function hasShopAccess(shopId) {
+      return isAdmin() || isOwnerOf(shopId) || isEmployeeOf(shopId);
+    }
+
+    // Entity Validators
+    function isValidUser(data) {
+      return data.keys().hasAll(['name', 'email', 'role']) 
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 100
+        && data.email is string && data.email.size() > 0 && data.email.size() <= 200
+        && data.role is string && data.role in ['ADMIN', 'OWNER', 'EMPLOYEE'];
+    }
+
+    function isValidShop(data) {
+      return data.keys().hasAll(['name', 'ownerName', 'phone', 'plan', 'status', 'expiryDate', 'createdAt', 'ownerId'])
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 100
+        && data.ownerName is string && data.ownerName.size() > 0 && data.ownerName.size() <= 100
+        && data.phone is string && data.phone.size() <= 50
+        && data.plan in ['30000 MMK', '50000 MMK']
+        && data.status in ['ACTIVE', 'SUSPENDED', 'EXPIRED']
+        && data.expiryDate is string && data.expiryDate.size() <= 50
+        && data.createdAt is timestamp
+        && data.ownerId is string && data.ownerId.size() <= 128;
+    }
+
+    function isValidProduct(data) {
+      return data.keys().hasAll(['name', 'sku', 'category', 'price', 'cost', 'stock', 'shopId', 'createdAt'])
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 200
+        && data.sku is string && data.sku.size() <= 100
+        && data.category is string && data.category.size() <= 100
+        && data.price is number && data.price >= 0
+        && data.cost is number && data.cost >= 0
+        && data.stock is number && data.stock >= 0
+        && data.shopId is string && data.shopId.size() <= 128
+        && data.createdAt is timestamp;
+    }
+
+    function isValidOrder(data) {
+      return data.keys().hasAll(['shopId', 'total', 'status', 'type', 'createdAt'])
+        && data.shopId is string && data.shopId.size() <= 128
+        && data.total is number && data.total >= 0
+        && data.status in ['PENDING', 'PREPARING', 'COMPLETED', 'CANCELLED']
+        && data.type in ['ONLINE', 'OFFLINE']
+        && data.createdAt is timestamp;
+    }
+
+    // Collections
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isVerified() && (request.auth.uid == userId || isAdmin() || (existing().shopId != null && existing().shopId == getUserData().shopId));
+      allow list: if isVerified() && (isAdmin() || (existing().shopId != null && existing().shopId == getUserData().shopId));
+      
+      allow create: if isValidId(userId) && isVerified() && request.auth.uid == userId 
+        && isValidUser(incoming()) 
+        && (incoming().role == 'ADMIN' ? false : true); // Cannot self-assign ADMIN
+        
+      allow update: if isValidId(userId) && isVerified() 
+        && (request.auth.uid == userId || isAdmin())
+        && isValidUser(incoming())
+        && (isAdmin() || incoming().role == existing().role); // Only admins can change roles
+        
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    match /shops/{shopId} {
+      allow get: if isValidId(shopId) && hasShopAccess(shopId);
+      allow list: if isVerified() && (isAdmin() || existing().ownerId == request.auth.uid || existing().id == getUserData().shopId);
+      
+      allow create: if isValidId(shopId) && isAdmin() && isValidShop(incoming());
+      
+      allow update: if isValidId(shopId) 
+        && (isAdmin() || isOwnerOf(shopId))
+        && isValidShop(incoming())
+        && incoming().createdAt == existing().createdAt
+        && incoming().ownerId == existing().ownerId;
+        
+      allow delete: if isValidId(shopId) && isAdmin();
+
+      match /products/{productId} {
+        allow get: if isValidId(shopId) && isValidId(productId) && hasShopAccess(shopId);
+        allow list: if isValidId(shopId) && hasShopAccess(shopId);
+        
+        allow create: if isValidId(shopId) && isValidId(productId) 
+          && hasShopAccess(shopId) 
+          && isValidProduct(incoming())
+          && incoming().shopId == shopId;
+          
+        allow update: if isValidId(shopId) && isValidId(productId) 
+          && hasShopAccess(shopId)
+          && isValidProduct(incoming())
+          && incoming().createdAt == existing().createdAt
+          && incoming().shopId == existing().shopId;
+          
+        allow delete: if isValidId(shopId) && isValidId(productId) && hasShopAccess(shopId);
+      }
+
+      match /orders/{orderId} {
+        allow get: if isValidId(shopId) && isValidId(orderId) && hasShopAccess(shopId);
+        allow list: if isValidId(shopId) && hasShopAccess(shopId);
+        
+        allow create: if isValidId(shopId) && isValidId(orderId) 
+          && hasShopAccess(shopId) 
+          && isValidOrder(incoming())
+          && incoming().shopId == shopId;
+          
+        allow update: if isValidId(shopId) && isValidId(orderId) 
+          && hasShopAccess(shopId)
+          && isValidOrder(incoming())
+          && incoming().createdAt == existing().createdAt
+          && incoming().shopId == existing().shopId;
+          
+        allow delete: if false; // Orders should not be deleted, only cancelled
+      }
+    }
+  }
+}
