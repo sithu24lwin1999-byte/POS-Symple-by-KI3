@@ -1,26 +1,56 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, Input } from '@/components/ui';
-import { Store, User, ShieldCheck } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Store, User, ShieldCheck, Loader2 } from 'lucide-react';
+import { auth } from '@/lib/firebase';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 
 export default function Login() {
   const navigate = useNavigate();
   const [role, setRole] = useState<'ADMIN' | 'OWNER' | 'EMPLOYEE'>('ADMIN');
+  const [email, setEmail] = useState('maxuxekuta321@gmail.com');
+  const [password, setPassword] = useState('password123');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (role === 'ADMIN') navigate('/admin');
-    if (role === 'OWNER') navigate('/owner');
-    if (role === 'EMPLOYEE') navigate('/pos');
+    if (!email || !password) {
+      setError('Please enter email and password');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+      } catch (err: any) {
+        if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
+          await createUserWithEmailAndPassword(auth, email, password);
+        } else {
+          throw err;
+        }
+      }
+
+      if (role === 'ADMIN') navigate('/admin');
+      if (role === 'OWNER') navigate('/owner');
+      if (role === 'EMPLOYEE') navigate('/pos');
+      
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'Failed to authenticate');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950 p-6 relative overflow-hidden">
-      {/* Decorative Background Elements */}
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/20 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-500/20 rounded-full blur-[120px] pointer-events-none" />
-
+      
       <Card className="w-full max-w-md relative z-10 p-8 shadow-2xl shadow-blue-900/5 border-white/40 dark:border-gray-800/60">
         <div className="flex flex-col items-center mb-8">
           <div className="w-16 h-16 bg-blue-600 rounded-3xl flex items-center justify-center mb-6 shadow-xl shadow-blue-500/30 rotate-3">
@@ -30,19 +60,37 @@ export default function Login() {
           <p className="text-gray-500 dark:text-gray-400 mt-2">Sign in to your workspace</p>
         </div>
 
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm">
+            {error}
+          </div>
+        )}
+
         <form onSubmit={handleLogin} className="space-y-5">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Email Address</label>
-            <Input type="email" placeholder="admin@ki3.com" defaultValue="demo@ki3.com" required />
+            <Input 
+              type="email" 
+              placeholder="admin@ki3.com" 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required 
+            />
           </div>
           
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Password</label>
-            <Input type="password" placeholder="••••••••" defaultValue="password" required />
+            <Input 
+              type="password" 
+              placeholder="••••••••" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required 
+            />
           </div>
 
           <div className="pt-2">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Simulate Role (Demo)</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Select Role</label>
             <div className="grid grid-cols-3 gap-3">
               <RoleSelector 
                 active={role === 'ADMIN'} 
@@ -65,8 +113,8 @@ export default function Login() {
             </div>
           </div>
 
-          <Button type="submit" className="w-full mt-6 h-14 text-lg">
-            Sign In
+          <Button type="submit" disabled={loading} className="w-full mt-6 h-14 text-lg">
+            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Sign In'}
           </Button>
         </form>
       </Card>
